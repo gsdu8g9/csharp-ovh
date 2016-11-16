@@ -277,37 +277,12 @@ namespace Ovh.Api
         /// Issues a POST call
         /// </summary>
         /// <param name="target">API method to call</param>
-        /// <param name="data">Object to serialize and send as body</param>
-        /// <param name="needAuth">If true, send authentication headers</param>
-        /// <returns>Raw API response</returns>
-        public string Post(string target, object data, bool needAuth = true)
-        {
-            return Call("POST", target, JsonConvert.SerializeObject(data), needAuth);
-        }
-
-        /// <summary>
-        /// Issues a POST call
-        /// </summary>
-        /// <param name="target">API method to call</param>
         /// <param name="data">Json data to send as body</param>
         /// <param name="needAuth">If true, send authentication headers</param>
         /// <returns>Raw API response</returns>
         public string Post(string target, string data, bool needAuth = true)
         {
             return Call("POST", target, data, needAuth);
-        }
-
-        /// <summary>
-        /// Issues a POST call
-        /// </summary>
-        /// <typeparam name="T">Expected return type</typeparam>
-        /// <param name="target">API method to call</param>
-        /// <param name="data">Object to serialize and send as body</param>
-        /// <param name="needAuth">If true, send authentication headers</param>
-        /// <returns>API response deserialized to T by JSON.Net</returns>
-        public T Post<T>(string target, object data, bool needAuth = true)
-        {
-            return Call<T>("POST", target, JsonConvert.SerializeObject(data), needAuth);
         }
 
         /// <summary>
@@ -340,17 +315,6 @@ namespace Ovh.Api
         #endregion
 
         #region PUT
-        /// <summary>
-        /// Issues a PUT call
-        /// </summary>
-        /// <param name="target">API method to call</param>
-        /// <param name="data">Object to serialize and send as body</param>
-        /// <param name="needAuth">If true, send authentication headers</param>
-        /// <returns>Raw API response</returns>
-        public string Put(string target, object data, bool needAuth = true)
-        {
-            return Call("PUT", target, JsonConvert.SerializeObject(data), needAuth);
-        }
 
         /// <summary>
         /// Issues a POST call
@@ -362,19 +326,6 @@ namespace Ovh.Api
         public string Put(string target, string data, bool needAuth = true)
         {
             return Call("PUT", target, data, needAuth);
-        }
-
-        /// <summary>
-        /// Issues a POST call
-        /// </summary>
-        /// <typeparam name="T">Expected return type</typeparam>
-        /// <param name="target">API method to call</param>
-        /// <param name="data">Object to serialize and send as body</param>
-        /// <param name="needAuth">If true, send authentication headers</param>
-        /// <returns>API response deserialized to T by JSON.Net</returns>
-        public T Put<T>(string target, object data, bool needAuth = true)
-        {
-            return Call<T>("PUT", target, JsonConvert.SerializeObject(data), needAuth);
         }
 
         /// <summary>
@@ -440,7 +391,7 @@ namespace Ovh.Api
         /// <returns>A result with the confirmation URL returned by the API</returns>
         public CredentialRequestResult RequestConsumerKey(CredentialRequest credentialRequest)
         {
-            return Post<CredentialRequestResult>("/auth/credential", credentialRequest, false);
+            return Post<CredentialRequestResult, CredentialRequest>("/auth/credential", credentialRequest, false);
         }
 
         /// <summary>
