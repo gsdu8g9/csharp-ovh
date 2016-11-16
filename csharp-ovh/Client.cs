@@ -227,7 +227,7 @@ namespace Ovh.Api
 
         #region GET
         /// <summary>
-        /// Issues a POST call
+        /// Issues a GET call
         /// </summary>
         /// <param name="target">API method to call</param>
         /// <param name="kwargs">Arguments to append to URL</param>
@@ -240,7 +240,7 @@ namespace Ovh.Api
         }
 
         /// <summary>
-        /// Issues a POST call with an expected return type
+        /// Issues a GET call with an expected return type
         /// </summary>
         /// <typeparam name="T">Expected return type</typeparam>
         /// <param name="target">API method to call</param>
@@ -459,10 +459,49 @@ namespace Ovh.Api
                     {
                         throw new HttpException("Low HTTP request failed error", ex);
                     }
-                    HandleHttpError(httpResponse, ex);
+                    throw ExtractException(httpResponse, ex);
                 }
             }
             return response;
+        }
+
+        private WebHeaderCollection GetHeaders(string method, string data, bool needAuth, string target)
+        {
+            WebHeaderCollection headers = new WebHeaderCollection();
+            headers.Add("X-Ovh-Application", ApplicationKey);
+
+            if (data != null)
+            {
+                headers.Add("Content-type", "application/json");
+            }
+
+            if (needAuth)
+            {
+                if (ApplicationSecret == null)
+                {
+                    throw new InvalidKeyException("Application secret is missing.");
+                }
+                if (ConsumerKey == null)
+                {
+                    throw new InvalidKeyException("ConsumerKey is missing.");
+                }
+
+                long currentServerTimestamp = GetCurrentUnixTimestamp() + TimeDelta;
+
+                SHA1Managed sha1Hasher = new SHA1Managed();
+                string toSign =
+                    string.Join("+", ApplicationSecret, ConsumerKey, method,
+                        target, data, currentServerTimestamp);
+                byte[] binaryHash = sha1Hasher.ComputeHash(Encoding.UTF8.GetBytes(toSign));
+                string signature = string.Join("",
+                    binaryHash.Select(x => x.ToString("X2"))).ToLower();
+
+                headers.Add("X-Ovh-Consumer", ConsumerKey);
+                headers.Add("X-Ovh-Timestamp", currentServerTimestamp.ToString());
+                headers.Add("X-Ovh-Signature", "$1$" + signature);
+            }
+
+            return headers;
         }
 
         private T Call<T>(string method, string path, string data = null, bool needAuth = true)
@@ -476,7 +515,7 @@ namespace Ovh.Api
             return JsonConvert.DeserializeObject<T>(Call(method, path, JsonConvert.SerializeObject(data), needAuth));
         }
 
-        private void HandleHttpError(HttpWebResponse httpResponse, Exception ex)
+        private Exception ExtractException(HttpWebResponse httpResponse, Exception ex)
         {
             JObject responseObject = ExtractResponseObject(httpResponse);
             string message = "";
@@ -505,43 +544,43 @@ namespace Ovh.Api
                 case HttpStatusCode.Forbidden:
                     if (errorCode == "NOT_GRANTED_CALL")
                     {
-                        throw new NotGrantedCallException(message);
+                        return new NotGrantedCallException(message);
                     }
                     else if (errorCode == "NOT_CREDENTIAL")
                     {
-                        throw new NotCredentialException(message);
+                        return new NotCredentialException(message);
                     }
                     else if (errorCode == "INVALID_KEY")
                     {
-                        throw new InvalidKeyException(message);
+                        return new InvalidKeyException(message);
                     }
                     else if (errorCode == "INVALID_CREDENTIAL")
                     {
-                        throw new InvalidCredentialException(message);
+                        return new InvalidCredentialException(message);
                     }
                     else if (errorCode == "FORBIDDEN")
                     {
-                        throw new ForbiddenException(message);
+                        return new ForbiddenException(message);
                     }
                     else
                     {
-                        throw new ApiException(message);
+                        return new ApiException(message);
                     }
                 case HttpStatusCode.NotFound:
-                    throw new ResourceNotFoundException(message);
+                    return new ResourceNotFoundException(message);
                 case HttpStatusCode.BadRequest:
                     if (errorCode == "QUERY_TIME_OUT")
                     {
-                        throw new StaleRequestException(message);
+                        return new StaleRequestException(message);
                     }
                     else
                     {
-                        throw new BadParametersException(message);
+                        return new BadParametersException(message);
                     }
                 case HttpStatusCode.Conflict:
-                    throw new ResourceConflictException(message);
+                    return new ResourceConflictException(message);
                 default:
-                    throw new ApiException(message);
+                    return new ApiException(message);
             }
         }
 
