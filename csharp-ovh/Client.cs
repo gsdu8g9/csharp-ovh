@@ -39,6 +39,7 @@ using System.Net;
 using System.Net.Cache;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading.Tasks;
 
 namespace Ovh.Api
 {
@@ -253,6 +254,18 @@ namespace Ovh.Api
             return Call<T>("GET", target, null, needAuth);
         }
 
+        /// <summary>
+        /// Issues an async GET call
+        /// </summary>
+        /// <param name="target">API method to call</param>
+        /// <param name="kwargs">Arguments to append to URL</param>
+        /// <param name="needAuth">If true, send authentication headers</param>
+        /// <returns>Raw API response</returns>
+        public async Task<string> AsyncGet(string target, NameValueCollection kwargs = null, bool needAuth = true)
+        {
+            target += kwargs?.ToString();
+            return await AsyncCall("GET", target, null, needAuth);
+        }
         #endregion
 
         #region POST
@@ -397,58 +410,48 @@ namespace Ovh.Api
         /// <exception cref="InvalidResponseException">when API response could not be decoded</exception>
         private string Call(string method, string path, string data = null, bool needAuth = true)
         {
+            return AsyncCall(method, path, data, needAuth).Result;
+        }
+
+        /// <summary>
+        /// Lowest level asynchronous call helper. If "consumerKey" is not "null", inject
+        /// authentication headers and sign the request.
+        /// Request signature is a sha1 hash on following fields, joined by '+'
+        ///  - application_secret
+        ///  - consumer_key
+        ///  - METHOD
+        ///  - full request url
+        ///  - body
+        ///  - server current time (takes time delta into account)
+        /// </summary>
+        /// <param name="method">HTTP verb. Usualy one of GET, POST, PUT, DELETE</param>
+        /// <param name="path">api entrypoint to call, relative to endpoint base path</param>
+        /// <param name="data">any json serializable data to send as request's body</param>
+        /// <param name="needAuth">if False, bypass signature</param>
+        /// <exception cref="HttpException">When underlying request failed for network reason</exception>
+        /// <exception cref="InvalidResponseException">when API response could not be decoded</exception>
+        private async Task<string> AsyncCall(string method, string path, string data = null, bool needAuth = true)
+        {
             method = method.ToUpper();
             if (path.StartsWith("/"))
             {
                 path = path.Substring(1);
             }
             string target = Endpoint + path;
-            WebHeaderCollection headers = new WebHeaderCollection();
-            headers.Add("X-Ovh-Application", ApplicationKey);
+            WebHeaderCollection headers = GetHeaders(method, data, needAuth, target);
 
-            if (data != null)
-            {
-                headers.Add("Content-type", "application/json");
-            }
-
-            if (needAuth)
-            {
-                if (ApplicationSecret == null)
-                {
-                    throw new InvalidKeyException("Application secret is missing.");
-                }
-                if (ConsumerKey == null)
-                {
-                    throw new InvalidKeyException("ConsumerKey is missing.");
-                }
-
-                long currentServerTimestamp = GetCurrentUnixTimestamp() + TimeDelta;
-
-                SHA1Managed sha1Hasher = new SHA1Managed();
-                string toSign =
-                    string.Join("+", ApplicationSecret, ConsumerKey, method,
-                        target, data, currentServerTimestamp);
-                byte[] binaryHash = sha1Hasher.ComputeHash(Encoding.UTF8.GetBytes(toSign));
-                string signature = string.Join("",
-                    binaryHash.Select(x => x.ToString("X2"))).ToLower();
-
-                headers.Add("X-Ovh-Consumer", ConsumerKey);
-                headers.Add("X-Ovh-Timestamp", currentServerTimestamp.ToString());
-                headers.Add("X-Ovh-Signature", "$1$" + signature);
-            }
-
-            string response = "";
             try
             {
                 //NOTE: would be better to reuse some headers
                 _webClient.Headers = headers;
+                Uri uri = new Uri(target);
                 if (method != "GET")
                 {
-                    response = _webClient.UploadString(path, method, data ?? "");
+                    return await _webClient.UploadStringTaskAsync(uri, method, data ?? "");
                 }
                 else
                 {
-                    response = _webClient.DownloadString(path);
+                    return await _webClient.DownloadStringTaskAsync(uri);
                 }
             }
             catch (WebException ex)
@@ -462,7 +465,6 @@ namespace Ovh.Api
                     throw ExtractException(httpResponse, ex);
                 }
             }
-            return response;
         }
 
         private WebHeaderCollection GetHeaders(string method, string data, bool needAuth, string target)
